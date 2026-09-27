@@ -132,7 +132,7 @@ const drop=$('#drop'),file=$('#file'),progress=$('#progress'),progressLine=$('#p
 const statusBadge=document.querySelector('.status');
 let API_BASE='';
 const LOCAL_ENGINE='http://127.0.0.1:8787';
-const localPage=/^(localhost|127\\.0\\.0\\.1)$/.test(location.hostname);
+const localPage=/^(localhost|127\.0\.0\.1)$/.test(location.hostname);
 function endpoint(path){return API_BASE+path}
 function sessionEndpoint(path){return endpoint(path)+(path.includes('?')?'&':'?')+'session='+encodeURIComponent(sessionId)}
 async function startSession(){
@@ -149,6 +149,9 @@ async function startSession(){
     return false;
   }
 }
+async function fetchLocal(path, options={}){
+  return fetch(LOCAL_ENGINE+path,{...options,targetAddressSpace:'loopback'});
+}
 async function detectEngine(){
   if(localPage){
     API_BASE='';
@@ -158,8 +161,8 @@ async function detectEngine(){
   statusBadge.textContent='Checking local engine…';
   try{
     const controller=new AbortController();
-    const timer=setTimeout(()=>controller.abort(),1600);
-    const r=await fetch(LOCAL_ENGINE+'/api/health',{cache:'no-store',signal:controller.signal});
+    const timer=setTimeout(()=>controller.abort(),5000);
+    const r=await fetchLocal('/api/health',{cache:'no-store',signal:controller.signal});
     clearTimeout(timer);
     const d=await r.json();
     if(!r.ok || !d.ok) throw Error(d.error||'Engine unavailable');
@@ -173,6 +176,14 @@ async function detectEngine(){
     return false;
   }
 }
+async function reportLoopbackPermission(){
+  if(localPage || !navigator.permissions) return;
+  try{
+    const p=await navigator.permissions.query({name:'loopback-network'});
+    if(p.state==='denied') statusBadge.textContent='Engine Offline · Allow Apps on device';
+  }catch(e){}
+}
+reportLoopbackPermission();
 detectEngine();
 const aspect=$('#aspect'),resolution=$('#resolution'),customResolution=$('#customResolution'),resolutionHint=$('#resolutionHint'),aspectHint=$('#aspectHint');
 $('#pick').onclick=()=>file.click();
@@ -194,7 +205,7 @@ async function handle(f){
   progress.style.display='block'; progressLine.style.display='block'; progress.textContent='Reading video…';
   const fd=new FormData(); fd.append('video',f);
   try{
-    const r=await fetch(sessionEndpoint('/api/upload'),{method:'POST',body:fd}); const d=await r.json(); if(!r.ok)throw Error(d.error);
+    const r=localPage ? await fetch(sessionEndpoint('/api/upload'),{method:'POST',body:fd}) : await fetchLocal('/api/upload?session='+encodeURIComponent(sessionId),{method:'POST',body:fd}); const d=await r.json(); if(!r.ok)throw Error(d.error);
     videoId=d.id; sourceMeta=d; progress.textContent=`Ready · ${d.name} · ${Math.round(d.duration)}s`;
     $('#dropTitle').textContent='Video loaded'; $('#dropMeta').textContent=`${d.width}×${d.height} · ${Math.round(d.duration)} seconds`;
     controls.style.display='grid'; actionRow.style.display='flex'; $('#note').style.display='block';
@@ -211,7 +222,8 @@ generate.onclick=async()=>{
     const ready=await detectEngine();
     if(!ready) throw Error('The local video engine is offline. Start CinderClip with run.bat and try again.');
   }
-    const r=await fetch(sessionEndpoint('/api/generate'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:videoId,count:+$('#count').value,length:+$('#length').value,aspect:aspect.value,resolution:selectedResolution,quality:$('#quality').value})});
+    const generatePath='/api/generate?session='+encodeURIComponent(sessionId);
+    const r=localPage ? await fetch(sessionEndpoint('/api/generate'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:videoId,count:+$('#count').value,length:+$('#length').value,aspect:aspect.value,resolution:selectedResolution,quality:$('#quality').value})}) : await fetchLocal(generatePath,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:videoId,count:+$('#count').value,length:+$('#length').value,aspect:aspect.value,resolution:selectedResolution,quality:$('#quality').value})});
     const d=await r.json(); if(!r.ok)throw Error(d.error);
     $('#results').innerHTML=d.clips.map(c=>{const u=endpoint(c.url);return `<article class="card"><video controls preload="metadata" src="${u}"></video><div class="cardbody"><strong>${c.title}</strong><small>${fmt(c.start)} → ${fmt(c.end)} · ${c.resolution}</small><a class="download" href="${u}" download><span>↓</span> Download ${c.resolution}</a></div></article>`}).join('');
     $('#resultsHead').style.display='flex'; $('#resultsCount').textContent=`${d.clips.length} clips · ${d.clips[0]?.resolution || ''}`;
