@@ -364,7 +364,7 @@ def stale_cleanup_loop():
         time.sleep(300)
 
 threading.Thread(target=stale_cleanup_loop, daemon=True).start()
-HOST = os.environ.get("HOST", "0.0.0.0")
+HOST = os.environ.get("HOST", "127.0.0.1")
 PORT = int(os.environ.get("PORT", "8787"))
 print(f"CinderClip server -> http://{HOST}:{PORT}")
 ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()
