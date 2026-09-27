@@ -152,7 +152,10 @@ class Handler(BaseHTTPRequestHandler):
     def send_cors(self):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Access-Control-Request-Private-Network, Access-Control-Request-Local-Network")
+        self.send_header("Access-Control-Allow-Private-Network", "true")
+        self.send_header("Access-Control-Allow-Local-Network", "true")
+        self.send_header("Vary", "Origin")
         self.send_header("Access-Control-Max-Age", "86400")
 
     def send_json(self, obj, code=200):
