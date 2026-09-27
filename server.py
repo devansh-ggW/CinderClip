@@ -168,7 +168,10 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(raw)
 
     def do_GET(self):
-        path = urllib.parse.urlparse(self.path).path
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path
+        query = urllib.parse.parse_qs(parsed.query)
+        session_id = query.get("session", [""])[0]
         if path == "/api/health":
             try:
                 ff = get_ffmpeg()
