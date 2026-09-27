@@ -45,6 +45,11 @@ def probe(path):
 def valid_session(value):
     return bool(SESSION_RE.fullmatch(str(value or "")))
 
+def safe_filename(value):
+    name = Path(str(value or "CinderClip")).stem
+    name = re.sub(r"[^A-Za-z0-9 _.-]+", "", name).strip(" .")
+    return name[:120] or "CinderClip"
+
 def session_prefix(session_id):
     if not valid_session(session_id):
         raise ValueError("Invalid session.")
@@ -129,7 +134,8 @@ def save_multipart(handler, session_id):
         ext = Path(original).suffix.lower()
         if ext not in {".mp4",".mov",".mkv",".webm",".m4v",".avi"}:
             raise ValueError("Unsupported video format")
-        name = f"{session_prefix(session_id)}{uuid.uuid4().hex}{ext}"
+        source_stem = safe_filename(original)
+        name = f"{session_prefix(session_id)}{uuid.uuid4().hex}__{source_stem}{ext}"
         path = UPLOADS / name
         path.write_bytes(data)
         return name, original, path
@@ -189,7 +195,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_cors()
             self.send_header("Content-Type", "application/octet-stream")
-            self.send_header("Content-Disposition", f'attachment; filename="{name}"')
+            clean_download_name = name.split("__", 1)[1] if "__" in name else name
+            self.send_header("Content-Disposition", f'attachment; filename="{clean_download_name}"')
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
@@ -317,7 +324,9 @@ class Handler(BaseHTTPRequestHandler):
                 clips = []
                 for i in range(count):
                     start = maxstart / 2 if count == 1 else maxstart * i / (count - 1)
-                    out = f"{session_prefix(session_id)}{uuid.uuid4().hex}.mp4"
+                    source_stem = src.name.split("__", 1)[1] if "__" in src.name else "CinderClip"
+                    source_stem = Path(source_stem).stem
+                    out = f"{session_prefix(session_id)}{uuid.uuid4().hex}__{source_stem} - Clip-{i+1}.mp4"
                     dest = OUTPUT / out
                     r = subprocess.run(
                         [ff, "-y", "-ss", str(start), "-i", str(src), "-t", str(clip),
@@ -329,9 +338,10 @@ class Handler(BaseHTTPRequestHandler):
                     )
                     if r.returncode:
                         raise RuntimeError((r.stderr or "FFmpeg failed.")[-1500:])
-                    clips.append({"id": out, "title": f"Candidate clip {i+1}", "start": start, "end": start+clip,
+                    clean_title = f"{source_stem} - Clip-{i+1}"
+                    clips.append({"id": out, "title": clean_title, "download_name": clean_title + ".mp4", "start": start, "end": start+clip,
                                   "duration": clip, "width": out_w, "height": out_h,
-                                  "resolution": f"{out_w}×{out_h}", "url": "/media/" + out})
+                                  "resolution": f"{out_w}×{out_h}", "url": "/media/" + urllib.parse.quote(out)})
                 return self.send_json({"clips": clips, "mode": "candidate-windows",
                                        "source": {"width": meta["width"], "height": meta["height"]},
                                        "max_output": {"width": mw, "height": mh, "long_side": ml}})
