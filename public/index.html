@@ -125,6 +125,8 @@ a{color:inherit}
 const $=s=>document.querySelector(s);
 let videoId=null;
 let sourceMeta=null;
+const sessionId=(crypto.randomUUID?crypto.randomUUID():Date.now().toString(36)+Math.random().toString(36).slice(2));
+let sessionStarted=false;
 const $id=id=>document.getElementById(id);
 const drop=$('#drop'),file=$('#file'),progress=$('#progress'),progressLine=$('#progressLine'),controls=$('#controls'),actionRow=$('#actionRow'),generate=$('#generate');
 const statusBadge=document.querySelector('.status');
@@ -132,11 +134,26 @@ let API_BASE='';
 const LOCAL_ENGINE='http://127.0.0.1:8787';
 const localPage=/^(localhost|127\\.0\\.0\\.1)$/.test(location.hostname);
 function endpoint(path){return API_BASE+path}
+function sessionEndpoint(path){return endpoint(path)+(path.includes('?')?'&':'?')+'session='+encodeURIComponent(sessionId)}
+async function startSession(){
+  if(sessionStarted) return true;
+  try{
+    const r=await fetch(sessionEndpoint('/api/session/start'),{method:'POST',cache:'no-store'});
+    const d=await r.json();
+    if(!r.ok || !d.ok) throw Error(d.error||'Could not start session');
+    sessionStarted=true;
+    return true;
+  }catch(e){
+    sessionStarted=false;
+    statusBadge.textContent='Engine · Session Error';
+    return false;
+  }
+}
 async function detectEngine(){
   if(localPage){
     API_BASE='';
     statusBadge.textContent='Local Engine · Ready';
-    return true;
+    return await startSession();
   }
   statusBadge.textContent='Checking local engine…';
   try{
@@ -147,6 +164,7 @@ async function detectEngine(){
     const d=await r.json();
     if(!r.ok || !d.ok) throw Error(d.error||'Engine unavailable');
     API_BASE=LOCAL_ENGINE;
+    if(!(await startSession())) return false;
     statusBadge.textContent='Local Engine · Connected';
     return true;
   }catch(e){
@@ -176,7 +194,7 @@ async function handle(f){
   progress.style.display='block'; progressLine.style.display='block'; progress.textContent='Reading video…';
   const fd=new FormData(); fd.append('video',f);
   try{
-    const r=await fetch(endpoint('/api/upload'),{method:'POST',body:fd}); const d=await r.json(); if(!r.ok)throw Error(d.error);
+    const r=await fetch(sessionEndpoint('/api/upload'),{method:'POST',body:fd}); const d=await r.json(); if(!r.ok)throw Error(d.error);
     videoId=d.id; sourceMeta=d; progress.textContent=`Ready · ${d.name} · ${Math.round(d.duration)}s`;
     $('#dropTitle').textContent='Video loaded'; $('#dropMeta').textContent=`${d.width}×${d.height} · ${Math.round(d.duration)} seconds`;
     controls.style.display='grid'; actionRow.style.display='flex'; $('#note').style.display='block';
@@ -193,7 +211,7 @@ generate.onclick=async()=>{
     const ready=await detectEngine();
     if(!ready) throw Error('The local video engine is offline. Start CinderClip with run.bat and try again.');
   }
-    const r=await fetch(endpoint('/api/generate'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:videoId,count:+$('#count').value,length:+$('#length').value,aspect:aspect.value,resolution:selectedResolution,quality:$('#quality').value})});
+    const r=await fetch(sessionEndpoint('/api/generate'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:videoId,count:+$('#count').value,length:+$('#length').value,aspect:aspect.value,resolution:selectedResolution,quality:$('#quality').value})});
     const d=await r.json(); if(!r.ok)throw Error(d.error);
     $('#results').innerHTML=d.clips.map(c=>{const u=endpoint(c.url);return `<article class="card"><video controls preload="metadata" src="${u}"></video><div class="cardbody"><strong>${c.title}</strong><small>${fmt(c.start)} → ${fmt(c.end)} · ${c.resolution}</small><a class="download" href="${u}" download><span>↓</span> Download ${c.resolution}</a></div></article>`}).join('');
     $('#resultsHead').style.display='flex'; $('#resultsCount').textContent=`${d.clips.length} clips · ${d.clips[0]?.resolution || ''}`;
@@ -231,6 +249,14 @@ let stars=[],w=0,h=0,dpr=1;
 function resize(){dpr=Math.min(window.devicePixelRatio||1,2);w=innerWidth;h=innerHeight;canvas.width=w*dpr;canvas.height=h*dpr;canvas.style.width=w+'px';canvas.style.height=h+'px';ctx.setTransform(dpr,0,0,dpr,0,0);const count=Math.min(180,Math.floor(w*h/9500));stars=Array.from({length:count},()=>({x:Math.random()*w,y:Math.random()*h,r:Math.random()*1.05+.18,a:Math.random()*.65+.18,s:(Math.random()-.5)*.08,t:Math.random()*Math.PI*2,heat:Math.random()}))}
 function paint(){ctx.clearRect(0,0,w,h);for(const p of stars){p.t+=.007;p.y+=p.s;if(p.y>h+2)p.y=-2;if(p.y<-2)p.y=h+2;const alpha=p.a*(.72+.28*Math.sin(p.t));const heat=p.heat;ctx.fillStyle=heat<.58?`rgba(255,180,70,${alpha})`:heat<.88?`rgba(255,96,26,${alpha})`:`rgba(255,235,185,${alpha})`;ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fill()}requestAnimationFrame(paint)}
 addEventListener('resize',resize);resize();paint();
+
+function cleanupSession(){
+  if(!sessionStarted) return;
+  try{
+    fetch(sessionEndpoint('/api/session/cleanup'),{method:'POST',keepalive:true,cache:'no-store'}).catch(()=>{});
+  }catch(e){}
+}
+addEventListener('pagehide',cleanupSession);
 </script>
 </body>
 </html>
