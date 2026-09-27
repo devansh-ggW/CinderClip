@@ -75,7 +75,7 @@ a{color:inherit}
 <div class="shell">
 <header class="top">
   <div class="brand"><span class="mark"><img src="/cinderclip.ico" alt="" aria-hidden="true"></span>CinderClip</div>
-  <div class="status">Local MVP · Private Processing</div>
+  <div class="status">Connecting to engine…</div>
 </header>
 
 <section class="hero">
@@ -127,6 +127,35 @@ let videoId=null;
 let sourceMeta=null;
 const $id=id=>document.getElementById(id);
 const drop=$('#drop'),file=$('#file'),progress=$('#progress'),progressLine=$('#progressLine'),controls=$('#controls'),actionRow=$('#actionRow'),generate=$('#generate');
+const statusBadge=document.querySelector('.status');
+let API_BASE='';
+const LOCAL_ENGINE='http://127.0.0.1:8787';
+const localPage=/^(localhost|127\\.0\\.0\\.1)$/.test(location.hostname);
+function endpoint(path){return API_BASE+path}
+async function detectEngine(){
+  if(localPage){
+    API_BASE='';
+    statusBadge.textContent='Local Engine · Ready';
+    return true;
+  }
+  statusBadge.textContent='Checking local engine…';
+  try{
+    const controller=new AbortController();
+    const timer=setTimeout(()=>controller.abort(),1600);
+    const r=await fetch(LOCAL_ENGINE+'/api/health',{cache:'no-store',signal:controller.signal});
+    clearTimeout(timer);
+    const d=await r.json();
+    if(!r.ok || !d.ok) throw Error(d.error||'Engine unavailable');
+    API_BASE=LOCAL_ENGINE;
+    statusBadge.textContent='Local Engine · Connected';
+    return true;
+  }catch(e){
+    API_BASE='';
+    statusBadge.textContent='Cloud UI · Engine Offline';
+    return false;
+  }
+}
+detectEngine();
 const aspect=$('#aspect'),resolution=$('#resolution'),customResolution=$('#customResolution'),resolutionHint=$('#resolutionHint'),aspectHint=$('#aspectHint');
 $('#pick').onclick=()=>file.click();
 drop.ondragover=e=>{e.preventDefault();drop.classList.add('drag')};
@@ -135,11 +164,19 @@ drop.ondrop=e=>{e.preventDefault();drop.classList.remove('drag');if(e.dataTransf
 file.onchange=()=>file.files[0]&&handle(file.files[0]);
 
 async function handle(f){
-  $('#error').textContent=''; $('#results').innerHTML=''; $('#resultsHead').style.display='none';
+  $('#error').textContent='';
+  if(!localPage && !API_BASE){
+    const ready=await detectEngine();
+    if(!ready){
+      $('#error').textContent='The hosted UI is ready, but the local video engine is offline. Start CinderClip with run.bat on this computer, then try again.';
+      progress.textContent=''; progressLine.style.display='none';
+      return;
+    }
+  } $('#results').innerHTML=''; $('#resultsHead').style.display='none';
   progress.style.display='block'; progressLine.style.display='block'; progress.textContent='Reading video…';
   const fd=new FormData(); fd.append('video',f);
   try{
-    const r=await fetch('/api/upload',{method:'POST',body:fd}); const d=await r.json(); if(!r.ok)throw Error(d.error);
+    const r=await fetch(endpoint('/api/upload'),{method:'POST',body:fd}); const d=await r.json(); if(!r.ok)throw Error(d.error);
     videoId=d.id; sourceMeta=d; progress.textContent=`Ready · ${d.name} · ${Math.round(d.duration)}s`;
     $('#dropTitle').textContent='Video loaded'; $('#dropMeta').textContent=`${d.width}×${d.height} · ${Math.round(d.duration)} seconds`;
     controls.style.display='grid'; actionRow.style.display='flex'; $('#note').style.display='block';
@@ -152,9 +189,13 @@ generate.onclick=async()=>{
   generate.disabled=true; progress.style.display='block'; progressLine.style.display='block'; progress.textContent='Rendering clips…'; $('#error').textContent=''; $('#results').innerHTML='';
   try{
     const selectedResolution=resolution.value==='custom' ? `custom:${Math.max(144, Math.min(+customResolution.value || getMaxLong(), getMaxLong()))}` : resolution.value;
-    const r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:videoId,count:+$('#count').value,length:+$('#length').value,aspect:aspect.value,resolution:selectedResolution,quality:$('#quality').value})});
+    if(!localPage && !API_BASE){
+    const ready=await detectEngine();
+    if(!ready) throw Error('The local video engine is offline. Start CinderClip with run.bat and try again.');
+  }
+    const r=await fetch(endpoint('/api/generate'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:videoId,count:+$('#count').value,length:+$('#length').value,aspect:aspect.value,resolution:selectedResolution,quality:$('#quality').value})});
     const d=await r.json(); if(!r.ok)throw Error(d.error);
-    $('#results').innerHTML=d.clips.map(c=>`<article class="card"><video controls preload="metadata" src="${c.url}"></video><div class="cardbody"><strong>${c.title}</strong><small>${fmt(c.start)} → ${fmt(c.end)} · ${c.resolution}</small><a class="download" href="${c.url}" download><span>↓</span> Download ${c.resolution}</a></div></article>`).join('');
+    $('#results').innerHTML=d.clips.map(c=>{const u=endpoint(c.url);return `<article class="card"><video controls preload="metadata" src="${u}"></video><div class="cardbody"><strong>${c.title}</strong><small>${fmt(c.start)} → ${fmt(c.end)} · ${c.resolution}</small><a class="download" href="${u}" download><span>↓</span> Download ${c.resolution}</a></div></article>`}).join('');
     $('#resultsHead').style.display='flex'; $('#resultsCount').textContent=`${d.clips.length} clips · ${d.clips[0]?.resolution || ''}`;
     progress.textContent='Done'; progressLine.style.display='none';
   }catch(e){$('#error').textContent=e.message; progress.textContent=''; progressLine.style.display='none'}finally{generate.disabled=false}
