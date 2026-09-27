@@ -17,7 +17,7 @@ export default {
       return Response.json(
         {
           ok: false,
-          error: "The CinderClip cloud video backend is not connected yet. R2 storage and video processing are the next setup step."
+          error: "Cloud video processing is not connected yet. This deployment currently uses the local video engine bridge."
         },
         { status: 501 }
       );
