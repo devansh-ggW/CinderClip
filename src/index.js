@@ -30,6 +30,9 @@ export default {
       );
     }
 
-    return env.ASSETS.fetch(request);
+    const assets = await env.ASSETS.fetch(request);
+    const response = new Response(assets.body, assets);
+    response.headers.set("Permissions-Policy", "loopback-network=(self)");
+    return response;
   }
 };
