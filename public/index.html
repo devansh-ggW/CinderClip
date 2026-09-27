@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>CinderClip — AI Video Clipper</title>
 <meta name="theme-color" content="#070302">
-<link rel="icon" href="/cinderclip.png" type="image/png">
+<link rel="icon" href="/cinderclip.ico" type="image/png">
 <style>
 :root{--bg:#050301;--panel:rgba(13,8,5,.88);--panel2:#100805;--line:#2a140c;--line2:#3b1b0f;--text:#fff8f0;--muted:#a79a91;--dim:#6d5f57;--accent:#ff5a1f;--accent2:#ffb347;--danger:#ff4d2e;}
 *{box-sizing:border-box}
@@ -17,8 +17,8 @@ a{color:inherit}
 .shell{width:min(1180px,calc(100% - 36px));margin:0 auto;padding:24px 0 72px}
 .top{display:flex;align-items:center;justify-content:space-between;padding:10px 0 54px}
 .brand{display:inline-flex;align-items:center;gap:10px;font-weight:850;letter-spacing:-.035em;font-size:20px;-webkit-font-smoothing:antialiased;text-rendering:geometricPrecision}
-.mark{width:34px;height:34px;flex:0 0 34px;overflow:visible;border:1px solid rgba(255,104,38,.55);border-radius:11px;display:grid;place-items:center;background:linear-gradient(145deg,rgba(255,92,28,.16),rgba(20,9,5,.94));box-shadow:0 0 30px rgba(255,72,20,.18)}
-.mark img{width:24px;height:24px;max-width:none;max-height:none;display:block;object-fit:contain;image-rendering:auto}
+.mark{width:34px;height:34px;flex:0 0 34px;overflow:hidden;border:1px solid rgba(255,104,38,.55);border-radius:11px;display:grid;place-items:center;background:linear-gradient(145deg,rgba(255,92,28,.16),rgba(20,9,5,.94));box-shadow:0 0 30px rgba(255,72,20,.18)}
+.mark img{width:26px;height:26px;max-width:none;max-height:none;display:block;object-fit:contain;image-rendering:auto}
 .status{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#a79a91;border:1px solid var(--line);background:rgba(12,7,4,.74);padding:9px 12px;border-radius:999px;backdrop-filter:blur(10px)}
 .hero{text-align:center;max-width:880px;margin:0 auto 34px}
 .eyebrow{display:inline-flex;align-items:center;gap:8px;color:#ffb37a;border:1px solid rgba(255,92,38,.26);background:rgba(255,80,25,.065);padding:8px 11px;border-radius:999px;font-size:11px;letter-spacing:.13em;text-transform:uppercase;margin-bottom:18px}
@@ -33,7 +33,7 @@ a{color:inherit}
 .drop.drag{border-color:rgba(255,118,48,.88);box-shadow:0 0 0 1px rgba(255,118,48,.20),0 0 80px rgba(255,74,20,.16)}
 .upload-inner{position:relative;z-index:1}
 .upload-orb{width:82px;height:82px;border-radius:22px;margin:0 auto 22px;border:1px solid rgba(255,112,42,.34);background:rgba(255,85,28,.08);display:grid;place-items:center;box-shadow:0 0 40px rgba(255,82,25,.10)}
-.upload-orb img{width:48px;height:48px;display:block;object-fit:contain;image-rendering:auto}
+.upload-orb img{width:50px;height:50px;display:block;object-fit:contain;image-rendering:auto}
 .drop h2{margin:0 0 9px;font-size:24px;letter-spacing:-.035em}
 .muted{color:#8f8178;font-size:13px}
 .primary{border:0;background:linear-gradient(135deg,#ffb347,#ff4d1f);color:#1b0803;border-radius:12px;padding:12px 18px;font-weight:800;letter-spacing:-.01em;margin-top:19px;box-shadow:0 12px 30px rgba(255,79,26,.20);transition:.16s ease}
@@ -88,7 +88,7 @@ a{color:inherit}
 <canvas id="stars" aria-hidden="true"></canvas>
 <div class="shell">
 <header class="top">
-  <div class="brand"><span class="mark"><img src="/cinderclip.png" alt="" aria-hidden="true"></span>CinderClip</div>
+  <div class="brand"><span class="mark"><img src="/cinderclip.ico" alt="" aria-hidden="true"></span>CinderClip</div>
   <div class="status">Connecting to engine…</div>
 </header>
 
@@ -101,7 +101,7 @@ a{color:inherit}
 <main class="workspace">
   <section class="drop" id="drop">
     <div class="upload-inner">
-      <div class="upload-orb"><img src="/cinderclip.png" alt="" aria-hidden="true"></div>
+      <div class="upload-orb"><img src="/cinderclip.ico" alt="" aria-hidden="true"></div>
       <h2 id="dropTitle">Drop your video here</h2>
       <div class="muted" id="dropMeta">MP4, MOV, MKV, WEBM · up to 2 GB</div>
       <button class="primary" id="pick">Choose video</button>
