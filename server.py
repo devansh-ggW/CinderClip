@@ -1,6 +1,6 @@
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
-import json, os, re, shutil, subprocess, uuid, urllib.parse
+import json, os, re, shutil, subprocess, uuid, urllib.parse, threading, time
 
 ROOT = Path(__file__).parent
 PUBLIC = ROOT / "public"
@@ -9,6 +9,9 @@ OUTPUT = ROOT / "output"
 UPLOADS.mkdir(exist_ok=True)
 OUTPUT.mkdir(exist_ok=True)
 MAX_SIZE = 2 * 1024 * 1024 * 1024
+STALE_AFTER = 2 * 60 * 60
+SESSION_RE = re.compile(r"^[A-Za-z0-9_-]{8,128}$")
+SESSION_LOCK = threading.Lock()
 
 def get_ffmpeg():
     ff = shutil.which("ffmpeg")
@@ -39,7 +42,70 @@ def probe(path):
         raise RuntimeError((r.stderr or "Could not read the video.")[-2000:])
     return {"duration": duration, "width": width, "height": height}
 
-def save_multipart(handler):
+def valid_session(value):
+    return bool(SESSION_RE.fullmatch(str(value or "")))
+
+def session_prefix(session_id):
+    if not valid_session(session_id):
+        raise ValueError("Invalid session.")
+    return session_id + "_"
+
+def cleanup_session(session_id):
+    prefix = session_prefix(session_id)
+    removed = 0
+    with SESSION_LOCK:
+        for root in (UPLOADS, OUTPUT):
+            for item in root.iterdir():
+                if item.is_file() and item.name.startswith(prefix):
+                    try:
+                        item.unlink()
+                        removed += 1
+                    except OSError:
+                        pass
+    return removed
+
+def cleanup_all_temp():
+    removed = 0
+    with SESSION_LOCK:
+        for root in (UPLOADS, OUTPUT):
+            for item in root.iterdir():
+                if item.is_file():
+                    try:
+                        item.unlink()
+                        removed += 1
+                    except OSError:
+                        pass
+    return removed
+
+def cleanup_stale():
+    cutoff = time.time() - STALE_AFTER
+    with SESSION_LOCK:
+        for root in (UPLOADS, OUTPUT):
+            for item in root.iterdir():
+                if not item.is_file():
+                    continue
+                try:
+                    if item.stat().st_mtime < cutoff:
+                        item.unlink()
+                except OSError:
+                    pass
+
+def start_session(session_id):
+    if not valid_session(session_id):
+        raise ValueError("Invalid session.")
+    # CinderClip's current local engine intentionally keeps one active browser session.
+    # Starting a fresh page therefore clears files from previous sessions immediately.
+    with SESSION_LOCK:
+        for root in (UPLOADS, OUTPUT):
+            for item in root.iterdir():
+                if item.is_file() and not item.name.startswith(session_prefix(session_id)):
+                    try:
+                        item.unlink()
+                    except OSError:
+                        pass
+    cleanup_stale()
+
+def save_multipart(handler, session_id):
     length = int(handler.headers.get("Content-Length", "0"))
     if length > MAX_SIZE:
         raise ValueError("File too large")
@@ -63,7 +129,7 @@ def save_multipart(handler):
         ext = Path(original).suffix.lower()
         if ext not in {".mp4",".mov",".mkv",".webm",".m4v",".avi"}:
             raise ValueError("Unsupported video format")
-        name = f"{uuid.uuid4()}{ext}"
+        name = f"{session_prefix(session_id)}{uuid.uuid4().hex}{ext}"
         path = UPLOADS / name
         path.write_bytes(data)
         return name, original, path
@@ -165,14 +231,30 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         try:
-            if self.path == "/api/upload":
-                name, original, path = save_multipart(self)
+            parsed = urllib.parse.urlparse(self.path)
+            path = parsed.path
+            query = urllib.parse.parse_qs(parsed.query)
+            session_id = query.get("session", [""])[0]
+
+            if path == "/api/session/start":
+                start_session(session_id)
+                return self.send_json({"ok": True, "session": session_id, "storage": "temporary-session"})
+
+            if path == "/api/session/cleanup":
+                removed = cleanup_session(session_id)
+                return self.send_json({"ok": True, "session": session_id, "removed": removed})
+
+            if path == "/api/upload":
+                start_session(session_id)
+                name, original, path = save_multipart(self, session_id)
                 meta = probe(path)
                 return self.send_json({"id": name, "name": original, **meta})
-            if self.path == "/api/generate":
+            if path == "/api/generate":
                 length = int(self.headers.get("Content-Length", "0"))
                 body = json.loads(self.rfile.read(length) or b"{}")
                 vid = Path(str(body.get("id", ""))).name
+                if not vid.startswith(session_prefix(session_id)) or not valid_session(session_id):
+                    return self.send_json({"error": "Invalid session or video."}, 400)
                 src = UPLOADS / vid
                 if not src.exists():
                     return self.send_json({"error": "Video not found."}, 404)
@@ -212,7 +294,7 @@ class Handler(BaseHTTPRequestHandler):
                 clips = []
                 for i in range(count):
                     start = maxstart / 2 if count == 1 else maxstart * i / (count - 1)
-                    out = f"{uuid.uuid4()}.mp4"
+                    out = f"{session_prefix(session_id)}{uuid.uuid4().hex}.mp4"
                     dest = OUTPUT / out
                     r = subprocess.run(
                         [ff, "-y", "-ss", str(start), "-i", str(src), "-t", str(clip),
@@ -237,5 +319,17 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass
 
+# Remove leftovers from previous app runs before accepting a fresh session.
+cleanup_all_temp()
+
+def stale_cleanup_loop():
+    while True:
+        try:
+            cleanup_stale()
+        except Exception:
+            pass
+        time.sleep(300)
+
+threading.Thread(target=stale_cleanup_loop, daemon=True).start()
 print("CinderClip local MVP -> http://localhost:8787")
 ThreadingHTTPServer(("127.0.0.1", 8787), Handler).serve_forever()
