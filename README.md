@@ -30,7 +30,7 @@ The legal pages are general experimental-product drafts and should be reviewed b
 
 The hosted Worker serves the CinderClip interface, while the current video engine remains local. When the hosted site is opened, the browser looks for the local engine at `http://127.0.0.1:8787`. When the local engine is running, uploads, FFmpeg processing, previews, and downloads are sent directly to that local service.
 
-This keeps the current MVP usable without adding paid cloud storage. Cloud storage and hosted video processing can be plugged in later without replacing the UI.
+This keeps the current MVP usable without adding paid cloud storage. Video files are temporary session files rather than a permanent library. Starting a new session clears previous session files, page exit/refresh attempts cleanup, and a stale-file cleanup pass handles interrupted sessions. Cloud storage and hosted video processing can be plugged in later without replacing the UI.
 
 ### Hosted UI + local engine
 
