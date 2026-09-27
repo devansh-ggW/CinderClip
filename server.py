@@ -364,5 +364,7 @@ def stale_cleanup_loop():
         time.sleep(300)
 
 threading.Thread(target=stale_cleanup_loop, daemon=True).start()
-print("CinderClip local MVP -> http://localhost:8787")
-ThreadingHTTPServer(("127.0.0.1", 8787), Handler).serve_forever()
+HOST = os.environ.get("HOST", "0.0.0.0")
+PORT = int(os.environ.get("PORT", "8787"))
+print(f"CinderClip server -> http://{HOST}:{PORT}")
+ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()
