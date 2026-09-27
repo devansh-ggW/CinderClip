@@ -175,6 +175,23 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"ok": True, "version": "0.1.0", "ffmpeg": os.path.basename(ff), "runtime": "local-processor", "storage": "local-disk"})
             except Exception as exc:
                 return self.send_json({"ok": False, "version": "0.1.0", "error": str(exc)}, 503)
+        if path.startswith("/download/"):
+            name = Path(path).name
+            if not valid_session(session_id) or not name.startswith(session_prefix(session_id)):
+                return self.send_json({"error": "Invalid session or file."}, 400)
+            p = OUTPUT / name
+            if not p.exists():
+                return self.send_error(404)
+            data = p.read_bytes()
+            self.send_response(200)
+            self.send_cors()
+            self.send_header("Content-Type", "application/octet-stream")
+            self.send_header("Content-Disposition", f'attachment; filename="{name}"')
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
+
         if path.startswith("/media/"):
             name = Path(path).name
             p = OUTPUT / name
