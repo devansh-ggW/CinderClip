@@ -175,7 +175,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
-        path = parsed.path
+        path = urllib.parse.unquote(parsed.path)
         query = urllib.parse.parse_qs(parsed.query)
         session_id = query.get("session", [""])[0]
         if path == "/api/health":
