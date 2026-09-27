@@ -183,7 +183,7 @@ let downloadInProgress=false;
 const $id=id=>document.getElementById(id);
 const drop=$('#drop'),file=$('#file'),progress=$('#progress'),progressLine=$('#progressLine'),controls=$('#controls'),actionRow=$('#actionRow'),generate=$('#generate');
 const statusBadge=document.querySelector('.status');
-let API_BASE='';
+const API_BASE='https://defined-distant-ken-placement.trycloudflare.com';
 const LOCAL_ENGINE='http://127.0.0.1:8787';
 const localPage=/^(localhost|127\.0\.0\.1)$/.test(location.hostname);
 function endpoint(path){return API_BASE+path}
