@@ -127,6 +127,7 @@ let videoId=null;
 let sourceMeta=null;
 const sessionId=(crypto.randomUUID?crypto.randomUUID():Date.now().toString(36)+Math.random().toString(36).slice(2));
 let sessionStarted=false;
+let downloadInProgress=false;
 const $id=id=>document.getElementById(id);
 const drop=$('#drop'),file=$('#file'),progress=$('#progress'),progressLine=$('#progressLine'),controls=$('#controls'),actionRow=$('#actionRow'),generate=$('#generate');
 const statusBadge=document.querySelector('.status');
@@ -225,7 +226,7 @@ generate.onclick=async()=>{
     const generatePath='/api/generate?session='+encodeURIComponent(sessionId);
     const r=localPage ? await fetch(sessionEndpoint('/api/generate'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:videoId,count:+$('#count').value,length:+$('#length').value,aspect:aspect.value,resolution:selectedResolution,quality:$('#quality').value})}) : await fetchLocal(generatePath,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:videoId,count:+$('#count').value,length:+$('#length').value,aspect:aspect.value,resolution:selectedResolution,quality:$('#quality').value})});
     const d=await r.json(); if(!r.ok)throw Error(d.error);
-    $('#results').innerHTML=d.clips.map(c=>{const u=endpoint(c.url);return `<article class="card"><video controls preload="metadata" src="${u}"></video><div class="cardbody"><strong>${c.title}</strong><small>${fmt(c.start)} → ${fmt(c.end)} · ${c.resolution}</small><a class="download" href="${u}" download><span>↓</span> Download ${c.resolution}</a></div></article>`}).join('');
+    $('#results').innerHTML=d.clips.map(c=>{const u=endpoint(c.url);const downloadUrl=API_BASE+'/download/'+encodeURIComponent(c.id)+'?session='+encodeURIComponent(sessionId);return `<article class="card"><video controls preload="metadata" src="${u}"></video><div class="cardbody"><strong>${c.title}</strong><small>${fmt(c.start)} → ${fmt(c.end)} · ${c.resolution}</small><a class="download" href="${downloadUrl}"><span>↓</span> Download ${c.resolution}</a></div></article>`}).join('');
     $('#resultsHead').style.display='flex'; $('#resultsCount').textContent=`${d.clips.length} clips · ${d.clips[0]?.resolution || ''}`;
     progress.textContent='Done'; progressLine.style.display='none';
   }catch(e){$('#error').textContent=e.message; progress.textContent=''; progressLine.style.display='none'}finally{generate.disabled=false}
@@ -262,8 +263,15 @@ function resize(){dpr=Math.min(window.devicePixelRatio||1,2);w=innerWidth;h=inne
 function paint(){ctx.clearRect(0,0,w,h);for(const p of stars){p.t+=.007;p.y+=p.s;if(p.y>h+2)p.y=-2;if(p.y<-2)p.y=h+2;const alpha=p.a*(.72+.28*Math.sin(p.t));const heat=p.heat;ctx.fillStyle=heat<.58?`rgba(255,180,70,${alpha})`:heat<.88?`rgba(255,96,26,${alpha})`:`rgba(255,235,185,${alpha})`;ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fill()}requestAnimationFrame(paint)}
 addEventListener('resize',resize);resize();paint();
 
+document.addEventListener('click',e=>{
+  const link=e.target.closest('.download');
+  if(!link) return;
+  downloadInProgress=true;
+  setTimeout(()=>{downloadInProgress=false},15000);
+});
+
 function cleanupSession(){
-  if(!sessionStarted) return;
+  if(!sessionStarted || downloadInProgress) return;
   try{
     fetch(sessionEndpoint('/api/session/cleanup'),{method:'POST',keepalive:true,cache:'no-store'}).catch(()=>{});
   }catch(e){}
